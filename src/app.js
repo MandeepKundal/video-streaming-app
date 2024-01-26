@@ -21,6 +21,6 @@ app.use(cookieParser());
 // Routes import
 import userRouter from "./routes/user.routes.js";
 // Routes declaration
-app.use("/api/v1/users", userRouter); // https://localhost:8000/api/v1/users
+app.use("/api/v1/users", userRouter); // http://localhost:8000/api/v1/users
 
 export { app }
