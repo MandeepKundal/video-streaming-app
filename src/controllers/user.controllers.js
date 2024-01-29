@@ -90,7 +90,7 @@ const loginUser = asyncHandler(async(req, res) => {
     // Generate Access Token and Refresh Token
     const {accessToken, refreshToken} = await generateAccessAndRefreshTokens(user._id);
     // Fetch the updated User from db
-    const loggedInUser = User.findById(user._id)
+    const loggedInUser = await User.findById(user._id)
         .select("-password -refreshToken"); // To leave the fields we don't need
     // Set cookie options httpOnly and secure so that the cookie can only be modified in server and not front end
     const options = {
