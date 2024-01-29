@@ -53,4 +53,89 @@ const registerUser = asyncHandler(async(req, res) => {
     );
 });
 
-export {registerUser};
+const generateAccessAndRefreshTokens = async(userId) => {
+    try {
+        const user = await User.findById(userId);
+        const accessToken = user.generateAccessToken();
+        const refreshToken = user.generateRefreshToken();
+
+        user.refreshToken = refreshToken;
+        // Saving user in order to save refreshToken in db
+        await user.save({
+            validateBeforeSave: false // Here we are setting validateBeforeSave to false because we don't need to validate anything when saving the updated user
+        });
+
+        return {accessToken, refreshToken};
+    } catch (error) {
+        throw new ApiError(500, "Error when generating refresh and access tokens");
+    }
+}
+
+const loginUser = asyncHandler(async(req, res) => {
+    // Get data from request body
+    const {
+        email, username, password
+    } = req.body;
+    // Check username/email
+    if (!username && !email) throw new ApiError(400, "Username and Email fields are required");
+    // if (!(username || email)) throw new ApiError(400, "Username or Email is required");
+    // Find user in db
+    const user = await User.findOne({
+        $or: [{username}, {email}]
+    });
+    if (!user) throw new ApiError(404, "User with the given Username or Email does not exist");
+    // Check password
+    const isPasswordCorrect = await user.isPasswordCorrect(password);
+    if (!isPasswordCorrect) throw new ApiError(401, "Invalid user credentials");
+    // Generate Access Token and Refresh Token
+    const {accessToken, refreshToken} = await generateAccessAndRefreshTokens(user._id);
+    // Fetch the updated User from db
+    const loggedInUser = User.findById(user._id)
+        .select("-password -refreshToken"); // To leave the fields we don't need
+    // Set cookie options httpOnly and secure so that the cookie can only be modified in server and not front end
+    const options = {
+        httpOnly: true,
+        secure: true
+    };
+    // Send secure cookie to user
+    return res.status(200)
+        .cookie("accessToken", accessToken, options) // Set accessToken in the cookie
+        .cookie("refreshToken", refreshToken, options) // Set refreshToken in the cookie
+        .json(new ApiResponse(
+            200,
+            {
+                user: loggedInUser,
+                accessToken,
+                refreshToken
+            },
+            "User logged in successfully" // Send login success message
+        ));
+});
+
+const logoutUser = asyncHandler(async(req, res) => {
+    // Fetch user and reset refreshToken for that user
+    await User.findByIdAndUpdate(
+        req.user._id,
+        {
+            $set: { // Use set to update a field in db
+                refreshToken: undefined
+            }
+        }
+    );
+    // Set cookie options httpOnly and secure so that the cookie can only be modified in server and not front end
+    const options = {
+        httpOnly: true,
+        secure: true
+    };
+    // Clear user's cookie data
+    return res.status(200)
+        .clearCookie("accessToken", options) // Remove accessToken from the cookie
+        .clearCookie("refreshToken", options) // Remove refreshToken from the cookie
+        .json(new ApiResponse(200, {}, "User has been logged out")); // Send success message
+});
+
+export {
+    registerUser,
+    loginUser,
+    logoutUser
+};
